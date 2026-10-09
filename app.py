@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import io
 from modules.data_engine import load_data, get_basic_metrics, get_missing_summary, impute_missing_values
 from modules.viz_engine import plot_correlation_heatmap, plot_distribution, plot_categorical_frequency
-from modules.ai_engine import generate_data_narrative
+from modules.ai_engine import generate_data_narrative, query_data_with_llm
 
 st.set_page_config(
     page_title="Automated EDA & AI Insights Engine",
@@ -12,9 +13,9 @@ st.set_page_config(
 )
 
 st.title("📊 Automated EDA & AI Insights Engine")
-st.markdown("डेटा अपलोड करें, मिसिंग वैल्यूज़ फिक्स करें और Gemini AI से इंस्टेंट एग्जीक्यूटिव बिजनेस इनसाइट्स प्राप्त करें।")
+st.markdown("डेटा अपलोड करें, मिसिंग वैल्यूज क्लीन करें, AI एग्जीक्यूटिव समरी पाएं और अपने डेटा से सीधे चैट करें।")
 
-# 1. Sidebar Configurations
+# Sidebar
 st.sidebar.header("⚙️ सेटिंग्स और इनपुट्स")
 uploaded_file = st.sidebar.file_uploader("CSV या Excel फ़ाइल अपलोड करें", type=["csv", "xlsx", "xls"])
 
@@ -54,7 +55,7 @@ if uploaded_file is not None:
         "🔍 मिसिंग वैल्यूज़",
         "🛠️ मिसिंग वैल्यू इम्प्यूटेशन",
         "📈 विज़ुअलाइज़ेशन",
-        "🤖 AI बिजनेस इनसाइट्स",
+        "🤖 AI इनसाइट्स & चैट",
         "💾 डेटा एक्सपोर्ट"
     ])
 
@@ -121,14 +122,12 @@ if uploaded_file is not None:
             st.plotly_chart(fig_cat, use_container_width=True)
 
     with tab5:
-        st.markdown("### 🤖 AI एग्जीक्यूटिव समरी और इनसाइट्स")
-        st.info("यह मॉड्यूल आपके पूरे डेटासेट की समरी का विश्लेषण करके बिज़नेस सिफ़ारिशें और रिस्क रिपोर्ट जनरेट करता है।")
-
+        st.markdown("### 🤖 AI एग्जीक्यूटिव समरी")
         if not gemini_api_key:
             st.warning("⚠️ कृपया साइडबार में अपनी Gemini API Key दर्ज करें।")
         else:
-            if st.button("✨ Generate AI Insights Report", type="primary"):
-                with st.spinner("AI डेटा का विश्लेषण कर रहा है... कृपया प्रतीक्षा करें..."):
+            if st.button("✨ Generate AI Summary Report", type="primary"):
+                with st.spinner("AI डेटा का विश्लेषण कर रहा है..."):
                     summary_payload = {
                         "rows": metrics["rows"],
                         "columns": metrics["columns"],
@@ -141,6 +140,47 @@ if uploaded_file is not None:
                     report = generate_data_narrative(summary_payload, gemini_api_key)
                     st.markdown("---")
                     st.markdown(report)
+
+            st.markdown("---")
+            st.markdown("### 💬 Chat with your Data (प्राकृतिक भाषा में सवाल पूछें)")
+            st.caption("उदा. 'Top 5 rows with highest value', 'Show distribution of column X', 'Find average value'")
+
+            user_query = st.text_input("अपने डेटा से सवाल पूछें:")
+            if st.button("🔍 सवाल पूछें (Ask Data)"):
+                if not user_query.strip():
+                    st.info("कृपया कोई सवाल टाइप करें।")
+                else:
+                    with st.spinner("AI सवाल समझ रहा है और क्वेरी चला रहा है..."):
+                        buf = io.StringIO()
+                        df.info(buf=buf)
+                        schema_str = f"Columns & Types:\n{buf.getvalue()}\n\nSample Data (First 3 rows):\n{df.head(3).to_dict(orient='records')}"
+
+                        res_dict = query_data_with_llm(user_query, schema_str, gemini_api_key)
+                        if "error" in res_dict:
+                            st.error(res_dict["error"])
+                        else:
+                            st.info(f"💡 **विश्लेषण:** {res_dict.get('explanation', '')}")
+                            generated_code = res_dict.get("code", "")
+
+                            with st.expander("🛠️ जनरेट किया गया Pandas कोड देखें"):
+                                st.code(generated_code, language="python")
+
+                            # सुरक्षित स्थानीय निष्पादन
+                            local_vars = {"df": df, "pd": pd, "np": np}
+                            try:
+                                exec(generated_code, {}, local_vars)
+                                query_result = local_vars.get("result", None)
+
+                                if query_result is not None:
+                                    st.markdown("#### 📊 परिणाम:")
+                                    if isinstance(query_result, (pd.DataFrame, pd.Series)):
+                                        st.dataframe(query_result, use_container_width=True)
+                                    else:
+                                        st.write(query_result)
+                                else:
+                                    st.warning("क्वेरी रन हो गई लेकिन कोई 'result' वेरिएबल वापस नहीं आया।")
+                            except Exception as exec_err:
+                                st.error(f"कोड चलाने में त्रुटि: {exec_err}")
 
     with tab6:
         st.markdown("### डेटा एक्सपोर्ट विकल्प")
