@@ -3,9 +3,9 @@ import pandas as pd
 import numpy as np
 import io
 from modules.data_engine import (
-    load_data,
-    get_basic_metrics,
-    get_missing_summary,
+    load_data, 
+    get_basic_metrics, 
+    get_missing_summary, 
     impute_missing_values,
     detect_outliers_iqr,
     handle_outliers,
@@ -16,26 +16,26 @@ from modules.ai_engine import generate_data_narrative, query_data_with_llm
 from modules.report_engine import generate_html_report
 
 st.set_page_config(
-    page_title="Automated EDA & AI Insights Engine",
-    page_icon="📊",
+    page_title="Automated EDA & DeepSeek AI Insights Engine",
+    page_icon="⚡",
     layout="wide"
 )
 
-st.title("📊 Automated EDA & AI Insights Engine")
-st.markdown("डेटा अपलोड करें, स्मार्ट 1-क्लिक क्लीनिंग चलाएँ, आउटलायर्स कैप करें, AI इनसाइट्स पाएँ और डेटा से चैट करें।")
+st.title("⚡ Automated EDA & DeepSeek Insights Engine")
+st.markdown("डेटा अपलोड करें, 1-क्लिक स्मार्ट क्लीनिंग चलाएं, आउटलायर्स फिक्स करें और DeepSeek AI से अल्ट्रा-फास्ट इनसाइट्स व कोड क्वेरी पाएं।")
 
 # Sidebar
 st.sidebar.header("⚙️ सेटिंग्स और इनपुट्स")
 uploaded_file = st.sidebar.file_uploader("CSV या Excel फ़ाइल अपलोड करें", type=["csv", "xlsx", "xls"])
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🔑 Gemini API Key (BYOK)")
-gemini_api_key = st.sidebar.text_input(
-    "अपनी Gemini API Key दर्ज करें:",
+st.sidebar.subheader("🔑 DeepSeek API Key (BYOK)")
+deepseek_api_key = st.sidebar.text_input(
+    "अपनी DeepSeek API Key दर्ज करें:",
     type="password",
-    help="फ्री की पाने के लिए aistudio.google.com पर जाएं"
+    help="की प्राप्त करने के लिए platform.deepseek.com पर जाएं"
 )
-st.sidebar.caption("👉 [Get Free Gemini API Key](https://aistudio.google.com/)")
+st.sidebar.caption("👉 [Get DeepSeek API Key](https://platform.deepseek.com/)")
 
 if uploaded_file is not None:
     if "data" not in st.session_state or st.session_state.get("file_name") != uploaded_file.name:
@@ -61,11 +61,11 @@ if uploaded_file is not None:
 
     # Tabs
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📋 डेटा प्रिव्यू",
-        "🔍 मिसिंग वैल्यूज़",
-        "🛠️ स्मार्ट क्लीनिंग & आउटलायर्स",
-        "📈 विज़ुअलाइज़ेशन",
-        "🤖 AI इनसाइट्स & चैट",
+        "📋 डेटा प्रिव्यू", 
+        "🔍 मिसिंग वैल्यूज़", 
+        "🛠️ स्मार्ट क्लीनिंग & आउटलायर्स", 
+        "📈 विज़ुअलाइज़ेशन", 
+        "🤖 DeepSeek AI इनसाइट्स & चैट",
         "💾 डेटा & रिपोर्ट एक्सपोर्ट"
     ])
 
@@ -85,7 +85,7 @@ if uploaded_file is not None:
 
     with tab3:
         st.markdown("### 🛠️ डेटा क्लीनिंग और आउटलायर मैनेजमेंट")
-
+        
         # Section A: 1-Click Smart Auto Clean
         st.subheader("⚡ 1. Smart 1-Click Auto-Clean")
         st.caption("यह स्वचालित रूप से Skewness के आधार पर Mean/Median इम्प्यूटेशन, कैटेगोरिकल Mode, स्ट्रिंग ट्रिमिंग और डुप्लिकेट्स को रिमूव करता है।")
@@ -127,7 +127,7 @@ if uploaded_file is not None:
         else:
             outlier_col = st.selectbox("आउटलायर्स चेक करने के लिए कॉलम चुनें:", num_cols, key="outlier_col_select")
             out_info = detect_outliers_iqr(df, outlier_col)
-
+            
             oc1, oc2, oc3, oc4 = st.columns(4)
             oc1.metric("आउटलायर काउंट", out_info["count"])
             oc2.metric("आउटलायर (%)", f"{out_info['percent']}%")
@@ -167,12 +167,12 @@ if uploaded_file is not None:
             st.plotly_chart(fig_cat, use_container_width=True)
 
     with tab5:
-        st.markdown("### 🤖 AI एग्जीक्यूटिव समरी")
-        if not gemini_api_key:
-            st.warning("⚠️ कृपया साइडबार में अपनी Gemini API Key दर्ज करें।")
+        st.markdown("### 🤖 DeepSeek AI एग्जीक्यूटिव समरी")
+        if not deepseek_api_key:
+            st.warning("⚠️ कृपया साइडबार में अपनी DeepSeek API Key दर्ज करें।")
         else:
-            if st.button("✨ Generate AI Summary Report", type="primary"):
-                with st.spinner("AI डेटा का विश्लेषण कर रहा है..."):
+            if st.button("⚡ Generate AI Summary Report", type="primary"):
+                with st.spinner("DeepSeek डेटा का विश्लेषण कर रहा है..."):
                     summary_payload = {
                         "rows": metrics["rows"],
                         "columns": metrics["columns"],
@@ -182,7 +182,7 @@ if uploaded_file is not None:
                         "categorical_cols": metrics["categorical_cols"],
                         "columns_list": list(df.columns)
                     }
-                    report = generate_data_narrative(summary_payload, gemini_api_key)
+                    report = generate_data_narrative(summary_payload, deepseek_api_key)
                     st.session_state["ai_summary"] = report
                     st.markdown("---")
                     st.markdown(report)
@@ -191,26 +191,26 @@ if uploaded_file is not None:
                 st.markdown(st.session_state["ai_summary"])
 
             st.markdown("---")
-            st.markdown("### 💬 Chat with your Data (प्राकृतिक भाषा में सवाल पूछें)")
-            st.caption("उदा. 'Top 5 rows with highest value', 'Find average value'")
-
+            st.markdown("### 💬 Chat with your Data (DeepSeek Code Engine)")
+            st.caption("उदा. 'Top 5 rows with highest value', 'Find average value of column X'")
+            
             user_query = st.text_input("अपने डेटा से सवाल पूछें:")
             if st.button("🔍 सवाल पूछें (Ask Data)"):
                 if not user_query.strip():
                     st.info("कृपया कोई सवाल टाइप करें।")
                 else:
-                    with st.spinner("AI सवाल समझ रहा है और क्वेरी चला रहा है..."):
+                    with st.spinner("DeepSeek क्वेरी समझ रहा है और Pandas कोड चला रहा है..."):
                         buf = io.StringIO()
                         df.info(buf=buf)
                         schema_str = f"Columns & Types:\n{buf.getvalue()}\n\nSample Data (First 3 rows):\n{df.head(3).to_dict(orient='records')}"
 
-                        res_dict = query_data_with_llm(user_query, schema_str, gemini_api_key)
+                        res_dict = query_data_with_llm(user_query, schema_str, deepseek_api_key)
                         if "error" in res_dict:
                             st.error(res_dict["error"])
                         else:
                             st.info(f"💡 **विश्लेषण:** {res_dict.get('explanation', '')}")
                             generated_code = res_dict.get("code", "")
-
+                            
                             with st.expander("🛠️ जनरेट किया गया Pandas कोड देखें"):
                                 st.code(generated_code, language="python")
 
@@ -232,7 +232,6 @@ if uploaded_file is not None:
 
     with tab6:
         st.markdown("### 💾 डेटा & रिपोर्ट एक्सपोर्ट")
-
         c_left, c_right = st.columns(2)
         with c_left:
             st.markdown("#### 1. क्लीन्ड डेटा डाउनलोड")
@@ -248,8 +247,6 @@ if uploaded_file is not None:
 
         with c_right:
             st.markdown("#### 2. एग्जीक्यूटिव बिज़नेस रिपोर्ट")
-            st.caption("यह एक पेशेवर, प्रिंट-फ्रेंडली HTML रिपोर्ट डाउनलोड करता है जिसे आप सीधे PDF (Ctrl+P) के रूप में सेव कर सकते हैं।")
-
             missing_df = get_missing_summary(df)
             missing_html = missing_df.to_html(classes="table", index=False) if not missing_df.empty else ""
             html_report = generate_html_report(
