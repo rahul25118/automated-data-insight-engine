@@ -3,44 +3,16 @@ import json
 import time
 from google import genai
 
-def get_active_model(client) -> str:
-    """
-    API Key के आधार पर उपलब्ध एक्टिव Gemini मॉडल को ऑटो-डिटेक्ट करता है।
-    """
-    try:
-        models = list(client.models.list())
-        # generateContent सपोर्ट करने वाले flash मॉडल्स प्राथमिकता पर
-        supported = [
-            m.name.replace("models/", "")
-            for m in models
-            if hasattr(m, "supported_actions") and "generateContent" in (m.supported_actions or [])
-        ]
+# Google द्वारा अनुशंसित सक्रिय मॉडल
+MODEL_NAME = "gemini-3.8-flash"
 
-        # Flash मॉडल्स को प्राथमिकता
-        for m_name in supported:
-            if "flash" in m_name.lower():
-                return m_name
-
-        # अगर flash न मिले तो कोई भी पहला सपोर्टेड मॉडल
-        if supported:
-            return supported[0]
-    except Exception:
-        pass
-
-    # फॉलबैक डिफ़ॉल्ट
-    return "gemini-2.5-flash"
-
-def call_gemini_safe(client, prompt: str, max_retries: int = 3) -> str:
-    """
-    सक्रिय मॉडल डिटेक्ट करता है और 503/429 पर बैकऑफ रीट्राई करता है।
-    """
-    active_model = get_active_model(client)
+def call_gemini(client, prompt: str, max_retries: int = 3) -> str:
+    """503 या हाई डिमांड पर सुरक्षित रीट्राई के साथ कॉल करता है।"""
     last_err = None
-
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
-                model=active_model,
+                model=MODEL_NAME,
                 contents=prompt,
             )
             if response and response.text:
@@ -52,16 +24,16 @@ def call_gemini_safe(client, prompt: str, max_retries: int = 3) -> str:
                 time.sleep(2 * (attempt + 1))
                 continue
             raise e
-
-    raise Exception(f"मॉडल '{active_model}' पर रीट्राई के बाद भी त्रुटि: {last_err}")
+    raise Exception(f"कॉल विफल रही: {last_err}")
 
 def generate_data_narrative(df_summary: dict, api_key: str) -> str:
     """डेटा समरी मेट्रिक्स के आधार पर Gemini से बिजनेस नैरेटिव इनसाइट्स जनरेट करता है।"""
-    if not api_key or not api_key.strip():
+    clean_key = api_key.strip() if api_key else ""
+    if not clean_key:
         return "⚠️ कृपया साइडबार में मान्य Gemini API Key दर्ज करें।"
 
     try:
-        client = genai.Client(api_key=api_key.strip())
+        client = genai.Client(api_key=clean_key)
         prompt = f"""
 आप एक सीनियर बिजनेस डेटा एनालिस्ट हैं। नीचे दिए गए डेटासेट की समरी और स्टैटिस्टिकल मेट्रिक्स को ध्यान से देखें और एक पेशेवर बिजनेस रिपोर्ट तैयार करें:
 
@@ -79,17 +51,18 @@ def generate_data_narrative(df_summary: dict, api_key: str) -> str:
 2. ⚠️ **संभावित जोखिम और डेटा हाइजीन (Data Hygiene & Risks)**: मिसिंग वैल्यूज, डुप्लिकेट्स या क्लीनिंग की जरूरत।
 3. 💡 **व्यावसायिक अनुशंसाएं (Actionable Recommendations)**: इस डेटा से बिजनेस टीम्स को क्या विश्लेषण या कदम उठाने चाहिए।
 """
-        return call_gemini_safe(client, prompt)
+        return call_gemini(client, prompt)
     except Exception as e:
         return f"❌ AI इनसाइट्स जनरेट करने में त्रुटि: {str(e)}"
 
 def query_data_with_llm(user_question: str, df_schema_info: str, api_key: str) -> dict:
     """यूज़र के सवाल को सुरक्षित Pandas कोड में बदलता है।"""
-    if not api_key or not api_key.strip():
+    clean_key = api_key.strip() if api_key else ""
+    if not clean_key:
         return {"error": "⚠️ कृपया साइडबार में मान्य Gemini API Key दर्ज करें।"}
 
     try:
-        client = genai.Client(api_key=api_key.strip())
+        client = genai.Client(api_key=clean_key)
         prompt = f"""
 आप एक एक्सपर्ट पाइथन डेटा एनालिस्ट हैं।
 डेटाफ्रेम का नाम `df` है।
@@ -107,7 +80,7 @@ def query_data_with_llm(user_question: str, df_schema_info: str, api_key: str) -
 4. अपना उत्तर केवल वैध JSON प्रारूप में दें:
 {{"code": "pandas code here", "explanation": "explanation here"}}
 """
-        raw_text = call_gemini_safe(client, prompt).strip()
+        raw_text = call_gemini(client, prompt).strip()
 
         start_idx = raw_text.find('{')
         end_idx = raw_text.rfind('}')
