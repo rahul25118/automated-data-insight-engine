@@ -1,10 +1,40 @@
 import os
 import json
+import time
 import re
 from google import genai
 
-# डिफ़ॉल्ट करंट फ्लैश मॉडल
-MODEL_NAME = "gemini-3.8-flash"
+# प्राइमरी और फॉलबैक मॉडल्स की प्राथमिकता सूची
+CANDIDATE_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-2.5-flash",
+    "gemini-1.5-flash"
+]
+
+def _call_gemini_with_fallback(client, prompt: str, max_retries: int = 2) -> str:
+    """
+    503 या हाई डिमांड पर ऑटोमैटिक रीट्राई और फॉलबैक मॉडल पर स्विच करता है।
+    """
+    last_error = None
+    for model_name in CANDIDATE_MODELS:
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                err_str = str(e)
+                last_error = err_str
+                # अगर 503 (हाई डिमांड) या 429 (रेट लिमिट) है तो थोड़ा रुककर रीट्राई करें
+                if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                # अगर 404 (मॉडल नहीं मिला) तो सीधे अगले मॉडल पर जाएँ
+                break
+    raise Exception(f"सभी उपलब्ध मॉडल्स पर प्रयास विफल रहा। अंतिम एरर: {last_error}")
 
 def generate_data_narrative(df_summary: dict, api_key: str) -> str:
     """डेटा समरी मेट्रिक्स के आधार पर Gemini से बिजनेस नैरेटिव इनसाइट्स जनरेट करता है।"""
@@ -30,11 +60,7 @@ def generate_data_narrative(df_summary: dict, api_key: str) -> str:
 2. ⚠️ **संभावित जोखिम और डेटा हाइजीन (Data Hygiene & Risks)**: मिसिंग वैल्यूज, डुप्लिकेट्स या क्लीनिंग की जरूरत।
 3. 💡 **व्यावसायिक अनुशंसाएं (Actionable Recommendations)**: इस डेटा से बिजनेस टीम्स को क्या विश्लेषण या कदम उठाने चाहिए।
 """
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=prompt,
-        )
-        return response.text
+        return _call_gemini_with_fallback(client, prompt)
     except Exception as e:
         return f"❌ AI इनसाइट्स जनरेट करने में त्रुटि: {str(e)}"
 
@@ -62,11 +88,7 @@ def query_data_with_llm(user_question: str, df_schema_info: str, api_key: str) -
 4. अपना उत्तर केवल वैध JSON प्रारूप में दें:
 {{"code": "pandas code here", "explanation": "explanation here"}}
 """
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=prompt,
-        )
-        raw_text = response.text.strip()
+        raw_text = _call_gemini_with_fallback(client, prompt).strip()
 
         start_idx = raw_text.find('{')
         end_idx = raw_text.rfind('}')
