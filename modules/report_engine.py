@@ -5,7 +5,7 @@ def generate_html_report(metrics: dict, ai_summary: str = "", missing_summary_ht
     एक पूरी तरह से स्टाइल की गई, प्रिंट और PDF-फ्रेंडली HTML एग्जीक्यूटिव रिपोर्ट तैयार करता है।
     """
     now_str = datetime.datetime.now().strftime("%d %b %Y, %I:%M %p")
-    
+
     ai_section = f"""
     <div class="section">
         <h2>🤖 AI Executive Insights & Recommendations</h2>

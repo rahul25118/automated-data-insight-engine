@@ -5,6 +5,7 @@ import io
 from modules.data_engine import load_data, get_basic_metrics, get_missing_summary, impute_missing_values
 from modules.viz_engine import plot_correlation_heatmap, plot_distribution, plot_categorical_frequency
 from modules.ai_engine import generate_data_narrative, query_data_with_llm
+from modules.report_engine import generate_html_report
 
 st.set_page_config(
     page_title="Automated EDA & AI Insights Engine",
@@ -13,7 +14,7 @@ st.set_page_config(
 )
 
 st.title("📊 Automated EDA & AI Insights Engine")
-st.markdown("डेटा अपलोड करें, मिसिंग वैल्यूज क्लीन करें, AI एग्जीक्यूटिव समरी पाएं और अपने डेटा से सीधे चैट करें।")
+st.markdown("डेटा अपलोड करें, मिसिंग वैल्यूज क्लीन करें, AI एग्जीक्यूटिव समरी पाएं, डेटा से चैट करें और 1-क्लिक रिपोर्ट एक्सपोर्ट करें।")
 
 # Sidebar
 st.sidebar.header("⚙️ सेटिंग्स और इनपुट्स")
@@ -36,6 +37,7 @@ if uploaded_file is not None:
             st.stop()
         st.session_state["data"] = raw_df
         st.session_state["file_name"] = uploaded_file.name
+        st.session_state["ai_summary"] = ""
         st.sidebar.success("फ़ाइल सफलतापूर्वक लोड हो गई!")
 
     df = st.session_state["data"]
@@ -56,7 +58,7 @@ if uploaded_file is not None:
         "🛠️ मिसिंग वैल्यू इम्प्यूटेशन",
         "📈 विज़ुअलाइज़ेशन",
         "🤖 AI इनसाइट्स & चैट",
-        "💾 डेटा एक्सपोर्ट"
+        "💾 डेटा & रिपोर्ट एक्सपोर्ट"
     ])
 
     with tab1:
@@ -138,12 +140,16 @@ if uploaded_file is not None:
                         "columns_list": list(df.columns)
                     }
                     report = generate_data_narrative(summary_payload, gemini_api_key)
+                    st.session_state["ai_summary"] = report
                     st.markdown("---")
                     st.markdown(report)
+            elif st.session_state.get("ai_summary"):
+                st.markdown("---")
+                st.markdown(st.session_state["ai_summary"])
 
             st.markdown("---")
             st.markdown("### 💬 Chat with your Data (प्राकृतिक भाषा में सवाल पूछें)")
-            st.caption("उदा. 'Top 5 rows with highest value', 'Show distribution of column X', 'Find average value'")
+            st.caption("उदा. 'Top 5 rows with highest value', 'Find average value'")
 
             user_query = st.text_input("अपने डेटा से सवाल पूछें:")
             if st.button("🔍 सवाल पूछें (Ask Data)"):
@@ -165,7 +171,6 @@ if uploaded_file is not None:
                             with st.expander("🛠️ जनरेट किया गया Pandas कोड देखें"):
                                 st.code(generated_code, language="python")
 
-                            # सुरक्षित स्थानीय निष्पादन
                             local_vars = {"df": df, "pd": pd, "np": np}
                             try:
                                 exec(generated_code, {}, local_vars)
@@ -183,16 +188,38 @@ if uploaded_file is not None:
                                 st.error(f"कोड चलाने में त्रुटि: {exec_err}")
 
     with tab6:
-        st.markdown("### डेटा एक्सपोर्ट विकल्प")
-        drop_dups = st.checkbox("डुप्लिकेट पंक्तियाँ हटाएं", value=False)
-        export_df = df.drop_duplicates() if drop_dups else df
+        st.markdown("### 💾 डेटा & रिपोर्ट एक्सपोर्ट")
 
-        csv_data = export_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="📥 प्रोसेस्ड / क्लीन्ड CSV डाउनलोड करें",
-            data=csv_data,
-            file_name="cleaned_imputed_data.csv",
-            mime="text/csv"
-        )
+        c_left, c_right = st.columns(2)
+        with c_left:
+            st.markdown("#### 1. क्लीन्ड डेटा डाउनलोड")
+            drop_dups = st.checkbox("डुप्लिकेट पंक्तियाँ हटाएं", value=False)
+            export_df = df.drop_duplicates() if drop_dups else df
+            csv_data = export_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 डाउनलोड क्लीन्ड CSV",
+                data=csv_data,
+                file_name="cleaned_imputed_data.csv",
+                mime="text/csv"
+            )
+
+        with c_right:
+            st.markdown("#### 2. एग्जीक्यूटिव बिज़नेस रिपोर्ट")
+            st.caption("यह एक पेशेवर, प्रिंट-फ्रेंडली HTML रिपोर्ट डाउनलोड करता है जिसे आप सीधे PDF (Ctrl+P) के रूप में सेव कर सकते हैं।")
+
+            missing_df = get_missing_summary(df)
+            missing_html = missing_df.to_html(classes="table", index=False) if not missing_df.empty else ""
+            html_report = generate_html_report(
+                metrics=metrics,
+                ai_summary=st.session_state.get("ai_summary", ""),
+                missing_summary_html=missing_html
+            )
+
+            st.download_button(
+                label="📄 डाउनलोड एग्जीक्यूटिव HTML/PDF रिपोर्ट",
+                data=html_report.encode("utf-8"),
+                file_name="Executive_Data_Report.html",
+                mime="text/html"
+            )
 else:
     st.info("शुरू करने के लिए साइडबार से CSV या Excel फ़ाइल अपलोड करें।")
