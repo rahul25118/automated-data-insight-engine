@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 def load_data(file):
-    """CSV या Excel फाइल लोड करने का फंक्शन"""
+    """CSV या Excel फ़ाइल लोड करने का फ़ंक्शन"""
     try:
         if file.name.endswith(".csv"):
             df = pd.read_csv(file)
@@ -33,7 +33,7 @@ def get_basic_metrics(df: pd.DataFrame):
     return metrics
 
 def get_missing_summary(df: pd.DataFrame):
-    """कॉलम-वाइज मिसिंग वैल्यूज का टेबल तैयार करता है"""
+    """कॉलम-वाइज़ मिसिंग वैल्यूज़ की समरी"""
     missing = df.isnull().sum()
     missing_pct = (missing / len(df)) * 100
     summary_df = pd.DataFrame({
@@ -43,3 +43,31 @@ def get_missing_summary(df: pd.DataFrame):
         "Data Type": [str(t) for t in df.dtypes.values]
     })
     return summary_df[summary_df["Missing Count"] > 0].sort_values(by="Missing Count", ascending=False)
+
+def impute_missing_values(df: pd.DataFrame, column: str, strategy: str, custom_val=None):
+    """
+    Missing value imputation logic:
+    - mean: numerical columns only
+    - median: numerical columns only
+    - mode: numerical or categorical
+    - constant: user defined value
+    - drop_rows: removes rows where this column is NaN
+    """
+    df_imputed = df.copy()
+
+    if strategy == "Mean":
+        if np.issubdtype(df_imputed[column].dtype, np.number):
+            df_imputed[column] = df_imputed[column].fillna(df_imputed[column].mean())
+    elif strategy == "Median":
+        if np.issubdtype(df_imputed[column].dtype, np.number):
+            df_imputed[column] = df_imputed[column].fillna(df_imputed[column].median())
+    elif strategy == "Mode":
+        mode_val = df_imputed[column].mode()
+        if not mode_val.empty:
+            df_imputed[column] = df_imputed[column].fillna(mode_val[0])
+    elif strategy == "Constant Value" and custom_val is not None:
+        df_imputed[column] = df_imputed[column].fillna(custom_val)
+    elif strategy == "Drop Rows":
+        df_imputed = df_imputed.dropna(subset=[column])
+
+    return df_imputed
