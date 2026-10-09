@@ -2,7 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
-from modules.data_engine import load_data, get_basic_metrics, get_missing_summary, impute_missing_values
+from modules.data_engine import (
+    load_data, 
+    get_basic_metrics, 
+    get_missing_summary, 
+    impute_missing_values,
+    detect_outliers_iqr,
+    handle_outliers,
+    smart_auto_clean
+)
 from modules.viz_engine import plot_correlation_heatmap, plot_distribution, plot_categorical_frequency
 from modules.ai_engine import generate_data_narrative, query_data_with_llm
 from modules.report_engine import generate_html_report
@@ -14,7 +22,7 @@ st.set_page_config(
 )
 
 st.title("📊 Automated EDA & AI Insights Engine")
-st.markdown("डेटा अपलोड करें, मिसिंग वैल्यूज क्लीन करें, AI एग्जीक्यूटिव समरी पाएं, डेटा से चैट करें और 1-क्लिक रिपोर्ट एक्सपोर्ट करें।")
+st.markdown("डेटा अपलोड करें, स्मार्ट 1-क्लिक क्लीनिंग चलाएँ, आउटलायर्स कैप करें, AI इनसाइट्स पाएँ और डेटा से चैट करें।")
 
 # Sidebar
 st.sidebar.header("⚙️ सेटिंग्स और इनपुट्स")
@@ -55,7 +63,7 @@ if uploaded_file is not None:
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📋 डेटा प्रिव्यू", 
         "🔍 मिसिंग वैल्यूज़", 
-        "🛠️ मिसिंग वैल्यू इम्प्यूटेशन", 
+        "🛠️ स्मार्ट क्लीनिंग & आउटलायर्स", 
         "📈 विज़ुअलाइज़ेशन", 
         "🤖 AI इनसाइट्स & चैट",
         "💾 डेटा & रिपोर्ट एक्सपोर्ट"
@@ -76,29 +84,64 @@ if uploaded_file is not None:
             st.success("डेटासेट में कोई भी मिसिंग वैल्यू नहीं है!")
 
     with tab3:
-        st.markdown("### 🛠️ मिसिंग वैल्यूज़ को हैंडल करें")
+        st.markdown("### 🛠️ डेटा क्लीनिंग और आउटलायर मैनेजमेंट")
+        
+        # Section A: 1-Click Smart Auto Clean
+        st.subheader("⚡ 1. Smart 1-Click Auto-Clean")
+        st.caption("यह स्वचालित रूप से Skewness के आधार पर Mean/Median इम्प्यूटेशन, कैटेगोरिकल Mode, स्ट्रिंग ट्रिमिंग और डुप्लिकेट्स को रिमूव करता है।")
+        if st.button("🚀 Run Smart Auto-Clean", type="primary"):
+            cleaned_data, clean_logs = smart_auto_clean(df)
+            st.session_state["data"] = cleaned_data
+            st.success("डेटासेट को सफलतापूर्वक ऑटो-क्लीन किया गया!")
+            with st.expander("📝 क्लीनिंग में किए गए सुधार (Logs)", expanded=True):
+                for log_item in clean_logs:
+                    st.write(log_item)
+            st.rerun()
+
+        st.markdown("---")
+
+        # Section B: Manual Imputation
+        st.subheader("🎯 2. मैन्युअल मिसिंग वैल्यू इम्प्यूटेशन")
         missing_cols = df.columns[df.isnull().any()].tolist()
-
         if not missing_cols:
-            st.success("सारे कॉलम्स क्लीन हैं! कोई मिसिंग वैल्यू नहीं बची।")
+            st.info("डेटासेट में कोई मिसिंग वैल्यू नहीं बची है।")
         else:
-            col_to_fix = st.selectbox("कॉलम चुनें जिसमें मिसिंग वैल्यूज हैं:", missing_cols)
+            col_to_fix = st.selectbox("कॉलम चुनें:", missing_cols, key="manual_imp_col")
             is_num = pd.api.types.is_numeric_dtype(df[col_to_fix])
+            strategies = ["Mean", "Median", "Mode", "Constant Value", "Drop Rows"] if is_num else ["Mode", "Constant Value", "Drop Rows"]
+            strategy = st.selectbox("मेथड चुनें:", strategies, key="manual_imp_strat")
+            custom_val = st.text_input("कस्टम वैल्यू दर्ज करें:") if strategy == "Constant Value" else None
 
-            if is_num:
-                strategies = ["Mean", "Median", "Mode", "Constant Value", "Drop Rows"]
-            else:
-                strategies = ["Mode", "Constant Value", "Drop Rows"]
-
-            strategy = st.selectbox("इम्प्यूटेशन मेथड चुनें:", strategies)
-            custom_val = None
-            if strategy == "Constant Value":
-                custom_val = st.text_input("कस्टम वैल्यू दर्ज करें:")
-
-            if st.button("Apply Imputation (लागू करें)"):
+            if st.button("Apply Manual Imputation"):
                 st.session_state["data"] = impute_missing_values(df, col_to_fix, strategy, custom_val)
-                st.success(f"'{col_to_fix}' पर '{strategy}' सफलतापूर्वक लागू किया गया!")
+                st.success(f"'{col_to_fix}' पर '{strategy}' लागू किया गया!")
                 st.rerun()
+
+        st.markdown("---")
+
+        # Section C: Outlier Detection and Capping
+        st.subheader("📊 3. IQR Outlier Detection & Handling")
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        if not num_cols:
+            st.info("डेटा में कोई न्यूमेरिकल कॉलम नहीं है।")
+        else:
+            outlier_col = st.selectbox("आउटलायर्स चेक करने के लिए कॉलम चुनें:", num_cols, key="outlier_col_select")
+            out_info = detect_outliers_iqr(df, outlier_col)
+            
+            oc1, oc2, oc3, oc4 = st.columns(4)
+            oc1.metric("आउटलायर काउंट", out_info["count"])
+            oc2.metric("आउटलायर (%)", f"{out_info['percent']}%")
+            oc3.metric("लोअर बाउंड (Q1 - 1.5*IQR)", out_info["lower_bound"])
+            oc4.metric("अपर बाउंड (Q3 + 1.5*IQR)", out_info["upper_bound"])
+
+            if out_info["count"] > 0:
+                out_action = st.radio("आउटलायर्स पर क्या कार्रवाई करें?", ["Cap (Winsorize)", "Remove Rows"], horizontal=True)
+                if st.button(f"Apply Outlier Treatment on '{outlier_col}'"):
+                    st.session_state["data"] = handle_outliers(df, outlier_col, method=out_action)
+                    st.success(f"'{outlier_col}' पर {out_action} सफलतापूर्वक लागू किया गया!")
+                    st.rerun()
+            else:
+                st.success(f"'{outlier_col}' में कोई आउटलायर नहीं पाया गया।")
 
     with tab4:
         st.markdown("### डेटा विज़ुअलाइज़ेशन")
