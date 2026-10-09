@@ -3,17 +3,29 @@ import pandas as pd
 import numpy as np
 from modules.data_engine import load_data, get_basic_metrics, get_missing_summary, impute_missing_values
 from modules.viz_engine import plot_correlation_heatmap, plot_distribution, plot_categorical_frequency
+from modules.ai_engine import generate_data_narrative
 
 st.set_page_config(
-    page_title="Automated EDA & Imputation Engine",
+    page_title="Automated EDA & AI Insights Engine",
     page_icon="📊",
     layout="wide"
 )
 
-st.title("📊 Automated EDA & Data Cleaning Engine")
-st.markdown("डेटा अपलोड करें, मिसिंग वैल्यूज़ हैंडल करें (Mean, Median, Mode) और इंस्टेंट इनसाइट्स पाएँ।")
+st.title("📊 Automated EDA & AI Insights Engine")
+st.markdown("डेटा अपलोड करें, मिसिंग वैल्यूज़ फिक्स करें और Gemini AI से इंस्टेंट एग्जीक्यूटिव बिजनेस इनसाइट्स प्राप्त करें।")
 
+# 1. Sidebar Configurations
+st.sidebar.header("⚙️ सेटिंग्स और इनपुट्स")
 uploaded_file = st.sidebar.file_uploader("CSV या Excel फ़ाइल अपलोड करें", type=["csv", "xlsx", "xls"])
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔑 Gemini API Key (BYOK)")
+gemini_api_key = st.sidebar.text_input(
+    "अपनी Gemini API Key दर्ज करें:",
+    type="password",
+    help="फ्री की पाने के लिए aistudio.google.com पर जाएं"
+)
+st.sidebar.caption("👉 [Get Free Gemini API Key](https://aistudio.google.com/)")
 
 if uploaded_file is not None:
     if "data" not in st.session_state or st.session_state.get("file_name") != uploaded_file.name:
@@ -27,7 +39,7 @@ if uploaded_file is not None:
 
     df = st.session_state["data"]
 
-    # 1. KPI Metrics
+    # KPI Metrics
     metrics = get_basic_metrics(df)
     st.subheader("📌 मुख्य डेटा मेट्रिक्स (Overview)")
     c1, c2, c3, c4 = st.columns(4)
@@ -36,12 +48,13 @@ if uploaded_file is not None:
     c3.metric("डुप्लिकेट पंक्तियाँ", metrics['duplicate_rows'])
     c4.metric("मिसिंग सेल्स (%)", f"{metrics['missing_percent']}%")
 
-    # 2. Tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # Tabs
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📋 डेटा प्रिव्यू",
         "🔍 मिसिंग वैल्यूज़",
         "🛠️ मिसिंग वैल्यू इम्प्यूटेशन",
         "📈 विज़ुअलाइज़ेशन",
+        "🤖 AI बिजनेस इनसाइट्स",
         "💾 डेटा एक्सपोर्ट"
     ])
 
@@ -108,6 +121,28 @@ if uploaded_file is not None:
             st.plotly_chart(fig_cat, use_container_width=True)
 
     with tab5:
+        st.markdown("### 🤖 AI एग्जीक्यूटिव समरी और इनसाइट्स")
+        st.info("यह मॉड्यूल आपके पूरे डेटासेट की समरी का विश्लेषण करके बिज़नेस सिफ़ारिशें और रिस्क रिपोर्ट जनरेट करता है।")
+
+        if not gemini_api_key:
+            st.warning("⚠️ कृपया साइडबार में अपनी Gemini API Key दर्ज करें।")
+        else:
+            if st.button("✨ Generate AI Insights Report", type="primary"):
+                with st.spinner("AI डेटा का विश्लेषण कर रहा है... कृपया प्रतीक्षा करें..."):
+                    summary_payload = {
+                        "rows": metrics["rows"],
+                        "columns": metrics["columns"],
+                        "missing_percent": metrics["missing_percent"],
+                        "duplicate_rows": metrics["duplicate_rows"],
+                        "numerical_cols": metrics["numerical_cols"],
+                        "categorical_cols": metrics["categorical_cols"],
+                        "columns_list": list(df.columns)
+                    }
+                    report = generate_data_narrative(summary_payload, gemini_api_key)
+                    st.markdown("---")
+                    st.markdown(report)
+
+    with tab6:
         st.markdown("### डेटा एक्सपोर्ट विकल्प")
         drop_dups = st.checkbox("डुप्लिकेट पंक्तियाँ हटाएं", value=False)
         export_df = df.drop_duplicates() if drop_dups else df
