@@ -45,27 +45,23 @@ def get_missing_summary(df: pd.DataFrame):
     return summary_df[summary_df["Missing Count"] > 0].sort_values(by="Missing Count", ascending=False)
 
 def impute_missing_values(df: pd.DataFrame, column: str, strategy: str, custom_val=None):
-    """
-    Missing value imputation logic:
-    - mean: numerical columns only
-    - median: numerical columns only
-    - mode: numerical or categorical
-    - constant: user defined value
-    - drop_rows: removes rows where this column is NaN
-    """
     df_imputed = df.copy()
+    is_num = pd.api.types.is_numeric_dtype(df_imputed[column])
 
-    if strategy == "Mean":
-        if np.issubdtype(df_imputed[column].dtype, np.number):
-            df_imputed[column] = df_imputed[column].fillna(df_imputed[column].mean())
-    elif strategy == "Median":
-        if np.issubdtype(df_imputed[column].dtype, np.number):
-            df_imputed[column] = df_imputed[column].fillna(df_imputed[column].median())
+    if strategy == "Mean" and is_num:
+        df_imputed[column] = df_imputed[column].fillna(df_imputed[column].mean())
+    elif strategy == "Median" and is_num:
+        df_imputed[column] = df_imputed[column].fillna(df_imputed[column].median())
     elif strategy == "Mode":
         mode_val = df_imputed[column].mode()
         if not mode_val.empty:
             df_imputed[column] = df_imputed[column].fillna(mode_val[0])
     elif strategy == "Constant Value" and custom_val is not None:
+        if is_num:
+            try:
+                custom_val = float(custom_val)
+            except ValueError:
+                pass
         df_imputed[column] = df_imputed[column].fillna(custom_val)
     elif strategy == "Drop Rows":
         df_imputed = df_imputed.dropna(subset=[column])
