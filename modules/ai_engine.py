@@ -3,20 +3,16 @@ import json
 import time
 from google import genai
 
-# प्राथमिकता सूची: पहला बिजी हो तो तुरंत दूसरे पर स्विच होगा
-ACTIVE_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-3.8-flash"
-]
+# Google द्वारा अनुशंसित सक्रिय मॉडल
+MODEL_NAME = "gemini-3.8-flash"
 
-def call_gemini(client, prompt: str) -> str:
-    """503 या हाई ट्रैफिक होने पर अपने-आप अगले उपलब्ध मॉडल पर स्विच करता है।"""
+def call_gemini(client, prompt: str, max_retries: int = 3) -> str:
+    """503 या हाई डिमांड पर सुरक्षित रीट्राई के साथ कॉल करता है।"""
     last_err = None
-    for model_name in ACTIVE_MODELS:
+    for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
-                model=model_name,
+                model=MODEL_NAME,
                 contents=prompt,
             )
             if response and response.text:
@@ -24,10 +20,11 @@ def call_gemini(client, prompt: str) -> str:
         except Exception as e:
             err_str = str(e)
             last_err = err_str
-            # अगर 503 (हाई डिमांड) या 429 (रेट लिमिट) या 404 है, तो 1 सेकंड रुककर अगला मॉडल आज़माएँ
-            time.sleep(1)
-            continue
-    raise Exception(f"सभी मॉडल्स पर कॉल विफल रही। अंतिम एरर: {last_err}")
+            if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise e
+    raise Exception(f"कॉल विफल रही: {last_err}")
 
 def generate_data_narrative(df_summary: dict, api_key: str) -> str:
     """डेटा समरी मेट्रिक्स के आधार पर Gemini से बिजनेस नैरेटिव इनसाइट्स जनरेट करता है।"""
