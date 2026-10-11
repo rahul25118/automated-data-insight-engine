@@ -16,7 +16,6 @@ st.markdown("डेटा अपलोड करें, मिसिंग व�
 uploaded_file = st.sidebar.file_uploader("CSV या Excel फ़ाइल अपलोड करें", type=["csv", "xlsx", "xls"])
 
 if uploaded_file is not None:
-    # State management ताकि इम्प्यूटेशन के बाद डेटा बना रहे
     if "data" not in st.session_state or st.session_state.get("file_name") != uploaded_file.name:
         raw_df, err = load_data(uploaded_file)
         if err:
@@ -68,7 +67,7 @@ if uploaded_file is not None:
             st.success("सारे कॉलम्स क्लीन हैं! कोई मिसिंग वैल्यू नहीं बची।")
         else:
             col_to_fix = st.selectbox("कॉलम चुनें जिसमें मिसिंग वैल्यूज हैं:", missing_cols)
-            is_num = np.issubdtype(df[col_to_fix].dtype, np.number)
+            is_num = pd.api.types.is_numeric_dtype(df[col_to_fix])
 
             if is_num:
                 strategies = ["Mean", "Median", "Mode", "Constant Value", "Drop Rows"]
