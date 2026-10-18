@@ -1,3 +1,11 @@
+import os
+import sys
+
+# Ensure current directory and modules are explicitly discoverable in sys.path
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 import streamlit as st
 import pandas as pd
 import numpy as np

@@ -9,7 +9,7 @@ def load_data(uploaded_file):
         elif fname.endswith((".xlsx", ".xls")):
             df = pd.read_excel(uploaded_file)
         else:
-            return None, "असमर्थित फ़ाइल। केवल CSV या Excel लोड करें।"
+            return None, "Unsupported file format. Please upload CSV or Excel."
         return df, None
     except Exception as e:
         return None, str(e)
@@ -30,7 +30,6 @@ def get_basic_metrics(df: pd.DataFrame) -> dict:
     }
 
 def get_statistical_diagnostics(df: pd.DataFrame) -> pd.DataFrame:
-    """न्यूमेरिकल फ़ीचर्स के लिए Skewness, Kurtosis और डिस्ट्रीब्यूशन शेप प्रोफाइलिंग"""
     num_df = df.select_dtypes(include=[np.number])
     if num_df.empty:
         return pd.DataFrame()
