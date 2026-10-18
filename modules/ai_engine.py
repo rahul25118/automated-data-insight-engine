@@ -3,6 +3,9 @@ import json
 import re
 from google import genai
 
+# डिफ़ॉल्ट करंट फ्लैश मॉडल
+MODEL_NAME = "gemini-3.8-flash"
+
 def generate_data_narrative(df_summary: dict, api_key: str) -> str:
     """डेटा समरी मेट्रिक्स के आधार पर Gemini से बिजनेस नैरेटिव इनसाइट्स जनरेट करता है।"""
     if not api_key or not api_key.strip():
@@ -28,7 +31,7 @@ def generate_data_narrative(df_summary: dict, api_key: str) -> str:
 3. 💡 **व्यावसायिक अनुशंसाएं (Actionable Recommendations)**: इस डेटा से बिजनेस टीम्स को क्या विश्लेषण या कदम उठाने चाहिए।
 """
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=MODEL_NAME,
             contents=prompt,
         )
         return response.text
@@ -60,12 +63,11 @@ def query_data_with_llm(user_question: str, df_schema_info: str, api_key: str) -
 {{"code": "pandas code here", "explanation": "explanation here"}}
 """
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=MODEL_NAME,
             contents=prompt,
         )
         raw_text = response.text.strip()
 
-        # JSON एक्सट्रैक्शन
         start_idx = raw_text.find('{')
         end_idx = raw_text.rfind('}')
         if start_idx != -1 and end_idx != -1:
