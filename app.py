@@ -2,40 +2,39 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+
 from modules.data_engine import (
-    load_data,
-    get_basic_metrics,
-    get_missing_summary,
+    load_data, 
+    get_basic_metrics, 
+    get_missing_summary, 
     impute_missing_values,
     detect_outliers_iqr,
     handle_outliers,
-    smart_auto_clean
+    smart_auto_clean,
+    get_statistical_diagnostics,
+    apply_transformation
 )
-from modules.viz_engine import plot_correlation_heatmap, plot_distribution, plot_categorical_frequency
-from modules.ai_engine import generate_data_narrative, query_data_with_llm
+from modules.viz_engine import (
+    plot_distribution, 
+    plot_bivariate_scatter, 
+    plot_correlation_heatmap, 
+    plot_categorical_frequency,
+    plot_ecdf
+)
 from modules.report_engine import generate_html_report
 
 st.set_page_config(
-    page_title="Automated EDA & DeepSeek AI Insights Engine",
-    page_icon="⚡",
+    page_title="Data Analyst Workbench | Enterprise EDA",
+    page_icon="📈",
     layout="wide"
 )
 
-st.title("⚡ Automated EDA & DeepSeek Insights Engine")
-st.markdown("डेटा अपलोड करें, 1-क्लिक स्मार्ट क्लीनिंग चलाएं, आउटलायर्स फिक्स करें और DeepSeek AI से अल्ट्रा-फास्ट इनसाइट्स व कोड क्वेरी पाएं।")
+st.title("📈 Enterprise Data Analyst Workbench")
+st.markdown("प्रोफेशनल डेटा एनालिस्ट्स के लिए हाई-स्पीड स्टैटिस्टिकल प्रोफाइलिंग, आउटलायर हैंडलिंग, ट्रांसफॉर्मेशन और विज़ुअलाइज़ेशन इंजन।")
 
 # Sidebar
-st.sidebar.header("⚙️ सेटिंग्स और इनपुट्स")
+st.sidebar.header("📁 डेटा इनपुट")
 uploaded_file = st.sidebar.file_uploader("CSV या Excel फ़ाइल अपलोड करें", type=["csv", "xlsx", "xls"])
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔑 DeepSeek API Key (BYOK)")
-deepseek_api_key = st.sidebar.text_input(
-    "अपनी DeepSeek API Key दर्ज करें:",
-    type="password",
-    help="की प्राप्त करने के लिए platform.deepseek.com पर जाएं"
-)
-st.sidebar.caption("👉 [Get DeepSeek API Key](https://platform.deepseek.com/)")
 
 if uploaded_file is not None:
     if "data" not in st.session_state or st.session_state.get("file_name") != uploaded_file.name:
@@ -45,221 +44,203 @@ if uploaded_file is not None:
             st.stop()
         st.session_state["data"] = raw_df
         st.session_state["file_name"] = uploaded_file.name
-        st.session_state["ai_summary"] = ""
-        st.sidebar.success("फ़ाइल सफलतापूर्वक लोड हो गई!")
+        st.sidebar.success("फ़ाइल लोड हो गई!")
 
     df = st.session_state["data"]
-
-    # KPI Metrics
     metrics = get_basic_metrics(df)
-    st.subheader("📌 मुख्य डेटा मेट्रिक्स (Overview)")
+
+    # Top KPI Metrics
+    st.subheader("📌 डेटा हेल्थ समरी (Overview)")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("कुल पंक्तियाँ (Rows)", f"{metrics['rows']:,}")
     c2.metric("कुल कॉलम (Columns)", metrics['columns'])
     c3.metric("डुप्लिकेट पंक्तियाँ", metrics['duplicate_rows'])
     c4.metric("मिसिंग सेल्स (%)", f"{metrics['missing_percent']}%")
 
-    # Tabs
+    # Workbench Tabs (Pure Analyst Focused)
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📋 डेटा प्रिव्यू",
-        "🔍 मिसिंग वैल्यूज़",
-        "🛠️ स्मार्ट क्लीनिंग & आउटलायर्स",
-        "📈 विज़ुअलाइज़ेशन",
-        "🤖 DeepSeek AI इनसाइट्स & चैट",
-        "💾 डेटा & रिपोर्ट एक्सपोर्ट"
+        "📋 डेटा प्रिव्यू & स्कीमा",
+        "📐 स्टैटिस्टिकल डायग्नोस्टिक्स",
+        "🛠️ क्लीनिंग & आउटलायर ट्रीटमेंट",
+        "⚡ फ़ीचर ट्रांसफॉर्मेशन",
+        "📊 विज़ुअलाइज़ेशन लैब",
+        "💾 एक्सपोर्ट & एग्जीक्यूटिव रिपोर्ट"
     ])
 
+    # Tab 1: Preview & Schema
     with tab1:
-        st.markdown("### डेटा हेड (First 5 Rows)")
-        st.dataframe(df.head(), use_container_width=True)
-        st.markdown("### डिस्क्रिप्टिव स्टैटिस्टिक्स")
+        st.markdown("### फर्स्ट 5 रोज़")
+        st.dataframe(df.head(10), use_container_width=True)
+        st.markdown("### डिस्क्रिप्टिव स्टैटिस्टिक्स (Quantiles & Moments)")
         st.dataframe(df.describe(include="all").T, use_container_width=True)
 
+    # Tab 2: Statistical Diagnostics (Analyst Specialty)
     with tab2:
-        st.markdown("### मिसिंग वैल्यू समरी")
+        st.markdown("### 📐 स्टैटिस्टिकल शेप & नॉर्मेलिटी डायग्नोस्टिक्स")
+        st.caption("Skewness, Kurtosis और डिस्ट्रीब्यूशन शेप देखकर तय करें कि फीचर को किस ट्रांसफॉर्मेशन (Log/Box-Cox) की जरूरत है।")
+        stats_df = get_statistical_diagnostics(df)
+        if not stats_df.empty:
+            st.dataframe(stats_df, use_container_width=True)
+        else:
+            st.info("डेटासेट में कोई न्यूमेरिकल कॉलम नहीं है।")
+
+        st.markdown("---")
+        st.markdown("### 🔍 मिसिंग वैल्यू ऑडिट")
         missing_df = get_missing_summary(df)
         if not missing_df.empty:
             st.dataframe(missing_df, use_container_width=True)
         else:
-            st.success("डेटासेट में कोई भी मिसिंग वैल्यू नहीं है!")
+            st.success("✓ कोई मिसिंग वैल्यूज नहीं पाई गईं!")
 
+    # Tab 3: Cleaning & Outliers
     with tab3:
-        st.markdown("### 🛠️ डेटा क्लीनिंग और आउटलायर मैनेजमेंट")
+        st.markdown("### 🛠️ क्लीनिंग और आउटलायर ट्रीटमेंट")
+        c_left, c_right = st.columns(2)
 
-        # Section A: 1-Click Smart Auto Clean
-        st.subheader("⚡ 1. Smart 1-Click Auto-Clean")
-        st.caption("यह स्वचालित रूप से Skewness के आधार पर Mean/Median इम्प्यूटेशन, कैटेगोरिकल Mode, स्ट्रिंग ट्रिमिंग और डुप्लिकेट्स को रिमूव करता है।")
-        if st.button("🚀 Run Smart Auto-Clean", type="primary"):
-            cleaned_data, clean_logs = smart_auto_clean(df)
-            st.session_state["data"] = cleaned_data
-            st.success("डेटासेट को सफलतापूर्वक ऑटो-क्लीन किया गया!")
-            with st.expander("📝 क्लीनिंग में किए गए सुधार (Logs)", expanded=True):
-                for log_item in clean_logs:
-                    st.write(log_item)
-            st.rerun()
-
-        st.markdown("---")
-
-        # Section B: Manual Imputation
-        st.subheader("🎯 2. मैन्युअल मिसिंग वैल्यू इम्प्यूटेशन")
-        missing_cols = df.columns[df.isnull().any()].tolist()
-        if not missing_cols:
-            st.info("डेटासेट में कोई मिसिंग वैल्यू नहीं बची है।")
-        else:
-            col_to_fix = st.selectbox("कॉलम चुनें:", missing_cols, key="manual_imp_col")
-            is_num = pd.api.types.is_numeric_dtype(df[col_to_fix])
-            strategies = ["Mean", "Median", "Mode", "Constant Value", "Drop Rows"] if is_num else ["Mode", "Constant Value", "Drop Rows"]
-            strategy = st.selectbox("मेथड चुनें:", strategies, key="manual_imp_strat")
-            custom_val = st.text_input("कस्टम वैल्यू दर्ज करें:") if strategy == "Constant Value" else None
-
-            if st.button("Apply Manual Imputation"):
-                st.session_state["data"] = impute_missing_values(df, col_to_fix, strategy, custom_val)
-                st.success(f"'{col_to_fix}' पर '{strategy}' लागू किया गया!")
+        with c_left:
+            st.markdown("#### 1. Smart 1-Click Auto-Clean")
+            st.caption("Skewness के आधार पर Mean/Median, Mode इम्प्यूटेशन, स्ट्रिंग ट्रिमिंग और डुप्लिकेट्स को हटाता है।")
+            if st.button("🚀 Run Auto-Clean", type="primary"):
+                cleaned_data, clean_logs = smart_auto_clean(df)
+                st.session_state["data"] = cleaned_data
+                st.success("डेटा ऑटो-क्लीन हो गया!")
+                with st.expander("📝 क्लीनिंग लॉग्स", expanded=True):
+                    for l in clean_logs:
+                        st.write(l)
                 st.rerun()
 
-        st.markdown("---")
-
-        # Section C: Outlier Detection and Capping
-        st.subheader("📊 3. IQR Outlier Detection & Handling")
-        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        if not num_cols:
-            st.info("डेटा में कोई न्यूमेरिकल कॉलम नहीं है।")
-        else:
-            outlier_col = st.selectbox("आउटलायर्स चेक करने के लिए कॉलम चुनें:", num_cols, key="outlier_col_select")
-            out_info = detect_outliers_iqr(df, outlier_col)
-
-            oc1, oc2, oc3, oc4 = st.columns(4)
-            oc1.metric("आउटलायर काउंट", out_info["count"])
-            oc2.metric("आउटलायर (%)", f"{out_info['percent']}%")
-            oc3.metric("लोअर बाउंड (Q1 - 1.5*IQR)", out_info["lower_bound"])
-            oc4.metric("अपर बाउंड (Q3 + 1.5*IQR)", out_info["upper_bound"])
-
-            if out_info["count"] > 0:
-                out_action = st.radio("आउटलायर्स पर क्या कार्रवाई करें?", ["Cap (Winsorize)", "Remove Rows"], horizontal=True)
-                if st.button(f"Apply Outlier Treatment on '{outlier_col}'"):
-                    st.session_state["data"] = handle_outliers(df, outlier_col, method=out_action)
-                    st.success(f"'{outlier_col}' पर {out_action} सफलतापूर्वक लागू किया गया!")
+            st.markdown("---")
+            st.markdown("#### 2. मैन्युअल इम्प्यूटेशन")
+            missing_cols = df.columns[df.isnull().any()].tolist()
+            if missing_cols:
+                col_to_fix = st.selectbox("मिसिंग कॉलम चुनें:", missing_cols)
+                is_num = pd.api.types.is_numeric_dtype(df[col_to_fix])
+                strats = ["Mean", "Median", "Mode", "Constant Value", "Drop Rows"] if is_num else ["Mode", "Constant Value", "Drop Rows"]
+                strat = st.selectbox("इम्प्यूटेशन मेथड:", strats)
+                c_val = st.text_input("कस्टम वैल्यू:") if strat == "Constant Value" else None
+                if st.button("Apply Imputation"):
+                    st.session_state["data"] = impute_missing_values(df, col_to_fix, strat, c_val)
+                    st.success(f"'{col_to_fix}' पर {strat} लागू हो गया!")
                     st.rerun()
             else:
-                st.success(f"'{outlier_col}' में कोई आउटलायर नहीं पाया गया।")
-
-    with tab4:
-        st.markdown("### डेटा विज़ुअलाइज़ेशन")
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
-
-        if numeric_cols:
-            col_sel = st.selectbox("न्यूमेरिकल कॉलम चुनें (Distribution):", numeric_cols)
-            plot_t = st.radio("प्लॉट का प्रकार:", ["Histogram", "Box Plot"], horizontal=True)
-            fig_dist = plot_distribution(df, col_sel, plot_t)
-            st.plotly_chart(fig_dist, use_container_width=True)
-
-            if len(numeric_cols) >= 2:
-                st.markdown("#### कोरिलेशन मैट्रिक्स")
-                fig_corr = plot_correlation_heatmap(df)
-                if fig_corr:
-                    st.plotly_chart(fig_corr, use_container_width=True)
-
-        if cat_cols:
-            st.markdown("#### कैटेगोरिकल फ़ीचर एनालिसिस")
-            cat_sel = st.selectbox("कैटेगोरिकल कॉलम चुनें:", cat_cols)
-            fig_cat = plot_categorical_frequency(df, cat_sel)
-            st.plotly_chart(fig_cat, use_container_width=True)
-
-    with tab5:
-        st.markdown("### 🤖 DeepSeek AI एग्जीक्यूटिव समरी")
-        if not deepseek_api_key:
-            st.warning("⚠️ कृपया साइडबार में अपनी DeepSeek API Key दर्ज करें।")
-        else:
-            if st.button("⚡ Generate AI Summary Report", type="primary"):
-                with st.spinner("DeepSeek डेटा का विश्लेषण कर रहा है..."):
-                    summary_payload = {
-                        "rows": metrics["rows"],
-                        "columns": metrics["columns"],
-                        "missing_percent": metrics["missing_percent"],
-                        "duplicate_rows": metrics["duplicate_rows"],
-                        "numerical_cols": metrics["numerical_cols"],
-                        "categorical_cols": metrics["categorical_cols"],
-                        "columns_list": list(df.columns)
-                    }
-                    report = generate_data_narrative(summary_payload, deepseek_api_key)
-                    st.session_state["ai_summary"] = report
-                    st.markdown("---")
-                    st.markdown(report)
-            elif st.session_state.get("ai_summary"):
-                st.markdown("---")
-                st.markdown(st.session_state["ai_summary"])
-
-            st.markdown("---")
-            st.markdown("### 💬 Chat with your Data (DeepSeek Code Engine)")
-            st.caption("उदा. 'Top 5 rows with highest value', 'Find average value of column X'")
-
-            user_query = st.text_input("अपने डेटा से सवाल पूछें:")
-            if st.button("🔍 सवाल पूछें (Ask Data)"):
-                if not user_query.strip():
-                    st.info("कृपया कोई सवाल टाइप करें।")
-                else:
-                    with st.spinner("DeepSeek क्वेरी समझ रहा है और Pandas कोड चला रहा है..."):
-                        buf = io.StringIO()
-                        df.info(buf=buf)
-                        schema_str = f"Columns & Types:\n{buf.getvalue()}\n\nSample Data (First 3 rows):\n{df.head(3).to_dict(orient='records')}"
-
-                        res_dict = query_data_with_llm(user_query, schema_str, deepseek_api_key)
-                        if "error" in res_dict:
-                            st.error(res_dict["error"])
-                        else:
-                            st.info(f"💡 **विश्लेषण:** {res_dict.get('explanation', '')}")
-                            generated_code = res_dict.get("code", "")
-
-                            with st.expander("🛠️ जनरेट किया गया Pandas कोड देखें"):
-                                st.code(generated_code, language="python")
-
-                            local_vars = {"df": df, "pd": pd, "np": np}
-                            try:
-                                exec(generated_code, {}, local_vars)
-                                query_result = local_vars.get("result", None)
-
-                                if query_result is not None:
-                                    st.markdown("#### 📊 परिणाम:")
-                                    if isinstance(query_result, (pd.DataFrame, pd.Series)):
-                                        st.dataframe(query_result, use_container_width=True)
-                                    else:
-                                        st.write(query_result)
-                                else:
-                                    st.warning("क्वेरी रन हो गई लेकिन कोई 'result' वेरिएबल वापस नहीं आया।")
-                            except Exception as exec_err:
-                                st.error(f"कोड चलाने में त्रुटि: {exec_err}")
-
-    with tab6:
-        st.markdown("### 💾 डेटा & रिपोर्ट एक्सपोर्ट")
-        c_left, c_right = st.columns(2)
-        with c_left:
-            st.markdown("#### 1. क्लीन्ड डेटा डाउनलोड")
-            drop_dups = st.checkbox("डुप्लिकेट पंक्तियाँ हटाएं", value=False)
-            export_df = df.drop_duplicates() if drop_dups else df
-            csv_data = export_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="📥 डाउनलोड क्लीन्ड CSV",
-                data=csv_data,
-                file_name="cleaned_imputed_data.csv",
-                mime="text/csv"
-            )
+                st.info("कोई मिसिंग वैल्यू नहीं बची है।")
 
         with c_right:
-            st.markdown("#### 2. एग्जीक्यूटिव बिज़नेस रिपोर्ट")
-            missing_df = get_missing_summary(df)
-            missing_html = missing_df.to_html(classes="table", index=False) if not missing_df.empty else ""
-            html_report = generate_html_report(
-                metrics=metrics,
-                ai_summary=st.session_state.get("ai_summary", ""),
-                missing_summary_html=missing_html
+            st.markdown("#### 3. IQR Outlier Detection & Capping")
+            num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            if num_cols:
+                out_col = st.selectbox("आउटलायर एनालिसिस के लिए कॉलम:", num_cols)
+                out_info = detect_outliers_iqr(df, out_col)
+                oc1, oc2 = st.columns(2)
+                oc1.metric("आउटलायर काउंट", f"{out_info['count']} ({out_info['percent']}%)")
+                oc2.metric("IQR बाउंड्स", f"[{out_info['lower_bound']} , {out_info['upper_bound']}]")
+                if out_info["count"] > 0:
+                    action = st.radio("ट्रीटमेंट चुनें:", ["Cap (Winsorize)", "Remove Rows"], horizontal=True)
+                    if st.button(f"Apply {action} on '{out_col}'"):
+                        st.session_state["data"] = handle_outliers(df, out_col, method=action)
+                        st.success(f"'{out_col}' पर आउटलायर ट्रीटमेंट लागू हो गया!")
+                        st.rerun()
+                else:
+                    st.success("इस कॉलम में कोई आउटलायर नहीं है।")
+
+    # Tab 4: Feature Transformation (Unique for Analysts)
+    with tab4:
+        st.markdown("### ⚡ फ़ीचर ट्रांसफॉर्मेशन & स्केलिंग लैब")
+        st.caption("रिग्रेशन और मशीन लर्निंग मॉडल्स के लिए फीचर्स को तैयार करें।")
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        if num_cols:
+            t_col = st.selectbox("ट्रांसफॉर्म करने के लिए कॉलम चुनें:", num_cols, key="trans_col")
+            t_type = st.selectbox("ट्रांसफॉर्मेशन प्रकार:", [
+                "Log (ln(x+1))", 
+                "Square Root", 
+                "Z-Score Standardization", 
+                "Min-Max Scaling (0 to 1)"
+            ])
+            if st.button(f"Apply {t_type}"):
+                res_df, err = apply_transformation(df, t_col, t_type)
+                if err:
+                    st.error(err)
+                else:
+                    st.session_state["data"] = res_df
+                    st.success(f"नया ट्रांसफॉर्म्ड कॉलम सफलतापूर्वक डेटा में जुड़ गया!")
+                    st.rerun()
+        else:
+            st.info("ट्रांसफॉर्मेशन के लिए कोई न्यूमेरिकल कॉलम नहीं है।")
+
+    # Tab 5: Advanced Visualization Lab
+    with tab5:
+        st.markdown("### 📊 विज़ुअलाइज़ेशन लैब")
+        v_tab1, v_tab2, v_tab3, v_tab4 = st.tabs([
+            "📈 डिस्ट्रीब्यूशन & प्रोबेबिलिटी",
+            "🔍 Bivariate Scatter & Trendline",
+            "🔥 कोरिलेशन मैट्रिक्स",
+            "📊 कैटेगोरिकल फ्रीक्वेंसी"
+        ])
+
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
+
+        with v_tab1:
+            if num_cols:
+                d_col = st.selectbox("फीचर चुनें:", num_cols, key="dist_c")
+                d_type = st.radio("प्लॉट प्रकार:", ["Histogram", "Violin Plot", "Box Plot"], horizontal=True)
+                st.plotly_chart(plot_distribution(df, d_col, d_type), use_container_width=True)
+                st.plotly_chart(plot_ecdf(df, d_col), use_container_width=True)
+
+        with v_tab2:
+            if len(num_cols) >= 2:
+                sc1, sc2, sc3 = st.columns(3)
+                x_c = sc1.selectbox("X-Axis (Feature):", num_cols, index=0)
+                y_c = sc2.selectbox("Y-Axis (Target/Feature):", num_cols, index=1 if len(num_cols) > 1 else 0)
+                color_opts = ["None"] + cat_cols + num_cols
+                hue_c = sc3.selectbox("Color / Dimension:", color_opts)
+                trend_chk = st.checkbox("OLS Regression Trendline जोड़ें", value=True)
+                st.plotly_chart(plot_bivariate_scatter(df, x_c, y_c, hue_c, trend_chk), use_container_width=True)
+            else:
+                st.info("स्कैटर प्लॉट के लिए कम से कम 2 न्यूमेरिकल कॉलम चाहिए।")
+
+        with v_tab3:
+            if len(num_cols) >= 2:
+                corr_m = st.radio("कोरिलेशन मेथड:", ["pearson", "spearman"], horizontal=True)
+                st.plotly_chart(plot_correlation_heatmap(df, corr_m), use_container_width=True)
+            else:
+                st.info("कोरिलेशन के लिए कम से कम 2 न्यूमेरिकल कॉलम चाहिए।")
+
+        with v_tab4:
+            if cat_cols:
+                cf_col = st.selectbox("कैटेगोरिकल फीचर चुनें:", cat_cols)
+                top_k = st.slider("शीर्ष N श्रेणियां दिखाएं:", 5, 30, 15)
+                st.plotly_chart(plot_categorical_frequency(df, cf_col, top_k), use_container_width=True)
+            else:
+                st.info("डेटा में कोई कैटेगोरिकल कॉलम नहीं है।")
+
+    # Tab 6: Export & HTML Report
+    with tab6:
+        st.markdown("### 💾 डेटा & स्टैटिस्टिकल रिपोर्ट एक्सपोर्ट")
+        e_col1, e_col2 = st.columns(2)
+        with e_col1:
+            st.markdown("#### 1. प्रोसेस किया गया डेटासेट डाउनलोड")
+            drop_dups = st.checkbox("डुप्लिकेट पंक्तियाँ हटाकर एक्सपोर्ट करें", value=False)
+            exp_df = df.drop_duplicates() if drop_dups else df
+            st.download_button(
+                "📥 डाउनलोड प्रोसेस्ड CSV",
+                exp_df.to_csv(index=False).encode("utf-8"),
+                "processed_analyst_data.csv",
+                "text/csv"
             )
 
+        with e_col2:
+            st.markdown("#### 2. एग्जीक्यूटिव स्टैटिस्टिकल रिपोर्ट")
+            stats_table = get_statistical_diagnostics(df)
+            stats_html = stats_table.to_html(classes="table", index=False) if not stats_table.empty else ""
+            miss_table = get_missing_summary(df)
+            miss_html = miss_table.to_html(classes="table", index=False) if not miss_table.empty else ""
+            rep_html = generate_html_report(metrics, stats_html, miss_html)
             st.download_button(
-                label="📄 डाउनलोड एग्जीक्यूटिव HTML/PDF रिपोर्ट",
-                data=html_report.encode("utf-8"),
-                file_name="Executive_Data_Report.html",
-                mime="text/html"
+                "📄 डाउनलोड HTML/PDF रिपोर्ट",
+                rep_html.encode("utf-8"),
+                "Analyst_Diagnostic_Report.html",
+                "text/html"
             )
 else:
     st.info("शुरू करने के लिए साइडबार से CSV या Excel फ़ाइल अपलोड करें।")
