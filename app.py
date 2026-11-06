@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import io
 from engine.statistics import compute_column_metrics, run_one_sample_ttest
 from engine.anomaly import detect_iqr_outliers, detect_modified_zscore
 from engine.time_series import analyze_trend_walk_forward
@@ -10,37 +11,38 @@ st.set_page_config(page_title="A — Data Insight Engine", layout="wide")
 st.title("A — Automated Deterministic Data Insight Engine")
 st.caption("Zero-hallucination, pure-statistical analytical engine for structured tabular data.")
 
-# Cache CSV parsing to prevent re-reading on every browser interaction
-@st.cache_data(show_spinner=False)
-def load_csv(file) -> pd.DataFrame:
-    return pd.read_csv(file)
+# Cache using raw bytes instead of file object to prevent buffer pointer stalls
+@st.cache_data(show_spinner="Parsing dataset...")
+def parse_csv_bytes(file_bytes: bytes) -> pd.DataFrame:
+    return pd.read_csv(io.BytesIO(file_bytes))
 
-# Cache heavy calculations per column
-@st.cache_data(show_spinner=False)
-def get_cached_metrics(series: pd.Series):
-    return compute_column_metrics(series)
-
-@st.cache_data(show_spinner=False)
-def get_cached_anomalies(series: pd.Series):
-    return detect_iqr_outliers(series), detect_modified_zscore(series)
-
-@st.cache_data(show_spinner=False)
-def get_cached_trend(series: pd.Series):
-    return analyze_trend_walk_forward(series)
-
-uploaded_file = st.file_uploader("Upload your structured CSV dataset", type=["csv"])
+uploaded_file = st.file_uploader(
+    "Upload your structured CSV dataset", 
+    type=["csv"],
+    help="Select or drag and drop a valid CSV file"
+)
 
 if uploaded_file is not None:
-    with st.spinner("Parsing dataset into memory..."):
-        df = load_csv(uploaded_file)
+    try:
+        # Reset file pointer and extract raw bytes
+        uploaded_file.seek(0)
+        file_bytes = uploaded_file.getvalue()
+        
+        if len(file_bytes) == 0:
+            st.error("Uploaded CSV file is empty. Please upload a file with data.")
+            st.stop()
+            
+        df = parse_csv_bytes(file_bytes)
+        
+    except Exception as e:
+        st.error(f"Error loading CSV file: {str(e)}")
+        st.stop()
 
+    st.success(f"✓ File loaded successfully: {uploaded_file.name} ({len(file_bytes) / 1024:.1f} KB)")
+    
     st.subheader("1. Raw Dataset Preview")
-    st.write(f"**Shape:** {df.shape[0]:,} rows × {df.shape[1]} columns")
-
-    # Bounded rendering prevents DOM/canvas freezing on large datasets
-    st.dataframe(df.head(25), height=350)
-    if len(df) > 25:
-        st.caption(f"Showing first 25 rows (out of {len(df):,}) to keep scrolling smooth.")
+    st.write(f"**Dimensions:** {df.shape[0]:,} rows × {df.shape[1]} columns")
+    st.dataframe(df.head(25), height=320, use_container_width=True)
 
     num_cols = df.select_dtypes(include=['number']).columns.tolist()
 
@@ -49,8 +51,9 @@ if uploaded_file is not None:
         selected_col = st.selectbox("Select numeric column to inspect:", num_cols)
 
         col1, col2 = st.columns(2)
-        metrics = get_cached_metrics(df[selected_col])
-        outliers_iqr, outliers_modz = get_cached_anomalies(df[selected_col])
+        metrics = compute_column_metrics(df[selected_col])
+        outliers_iqr = detect_iqr_outliers(df[selected_col])
+        outliers_modz = detect_modified_zscore(df[selected_col])
 
         with col1:
             st.write("**Descriptive Metrics:**")
@@ -62,10 +65,10 @@ if uploaded_file is not None:
             st.write(f"Modified Z-Score Outliers: **{outliers_modz['count']}**")
             if outliers_iqr['count'] > 0:
                 st.write(f"Bounds: {outliers_iqr['bounds']}")
-                st.write(f"Sample Outlier Values: {outliers_iqr['values'][:10]}")
+                st.write(f"Sample Outliers: {outliers_iqr['values'][:8]}")
 
         st.subheader("3. Walk-Forward Trend & Time Series")
-        ts_metrics = get_cached_trend(df[selected_col])
+        ts_metrics = analyze_trend_walk_forward(df[selected_col])
         st.json(ts_metrics)
 
         st.subheader("4. Inferential Testing (One-Sample t-Test)")
@@ -73,12 +76,14 @@ if uploaded_file is not None:
         if st.button("Run Hypothesis Test"):
             ttest_res = run_one_sample_ttest(df[selected_col], mu0=mu0)
             st.json(ttest_res)
+    else:
+        st.warning("No numeric columns detected in this CSV for statistical computation.")
 
     st.subheader("5. Group Aggregations")
     aggs = compute_group_aggregations(df)
     if aggs:
         st.json(aggs)
     else:
-        st.info("No categorical + numerical pairs found for group aggregation.")
+        st.info("No categorical + numerical pairs available for group aggregation.")
 else:
-    st.info("Please upload a CSV file to begin analysis.")
+    st.info("Upload a CSV file above to begin analysis.")
